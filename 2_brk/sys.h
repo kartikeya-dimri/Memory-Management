@@ -103,7 +103,7 @@ static __inline__ int __nolibc_enosys(const char *syscall, ...)
  * should not be placed here.
  */
 
-
+/////////////////////////////////////////////////////////////////////////////////
 /*
  * int brk(void *addr);
  * void *sbrk(intptr_t inc)
@@ -117,7 +117,7 @@ void *_sys_brk(void *addr)
 
 static __attribute__((unused))
 int brk(void *addr)
-{
+{	
 	void *ret = _sys_brk(addr);
 
 	if (!ret) {
@@ -134,12 +134,12 @@ void *sbrk(intptr_t inc)
 	void *ret = _sys_brk(NULL);
 
 	if (ret && _sys_brk(ret + inc) == ret + inc)
-		return ret + inc;
+		return ret + inc; // ret as per standard semantics - return old break
 
 	SET_ERRNO(ENOMEM);
 	return (void *)-1;
 }
-
+/////////////////////////////////////////////////////////////////////////////////
 
 /*
  * int chdir(const char *path);

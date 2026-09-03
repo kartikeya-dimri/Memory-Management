@@ -14,7 +14,7 @@ int main() {
         }
 
         // Touch the memory so we actually use it
-        *ptrs[i] = i;
+        // *ptrs[i] = i;
     }
 
     printf("1000 small allocations completed\n");
@@ -43,8 +43,8 @@ int main() {
     getchar();
     
     // Touch the memory
-    large[0] = 'A';
-    large[size - 1] = 'Z';
+    // large[0] = 'A';
+    // large[size - 1] = 'Z';
 
     free(large);
 
