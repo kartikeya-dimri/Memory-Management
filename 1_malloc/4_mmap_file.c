@@ -21,6 +21,8 @@ int main() {
         return 1;
     }
 
+    getchar();
+
     size_t size = st.st_size;
 
     char *data = mmap(
@@ -39,6 +41,8 @@ int main() {
     }
 
     printf("%.*s", (int)size, data);
+
+    getchar();
 
     munmap(data, size);
     close(fd);
