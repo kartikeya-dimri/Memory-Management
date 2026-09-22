@@ -8,7 +8,7 @@
  */
 
 #define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
-
+ 
 #include <linux/kernel.h>
 #include <linux/slab.h>
 #include <linux/backing-dev.h>
@@ -114,22 +114,53 @@ static int check_brk_limits(unsigned long addr, unsigned long len)
 	return mlock_future_ok(mm, is_def_locked, len) ? 0 : -EAGAIN;
 }
 
+// MACRO
+// argument is the new program break - unsigned long brk
+// SYSCALL_DEFINE1(syscall_name, type, name)
 SYSCALL_DEFINE1(brk, unsigned long, brk)
-{
+{	
+	// variables to store new page aligned brk, old page aligned brk and current brk 
 	unsigned long newbrk, oldbrk, origbrk;
+	
+    // mm_struct->start_brk
+	// mm_struct->brk
+	// current is the kernel pointer to current executing task
+	// current->mm gives the ptr to mm_struct
+	// now we can access mm_struct like mm->brk
 	struct mm_struct *mm = current->mm;
-	struct vm_area_struct *brkvma, *next = NULL;
-	unsigned long min_brk;
-	bool populate = false;
-	LIST_HEAD(uf);
-	struct vma_iterator vmi;
 
+	// struct vm_area_struct = VMA
+	// VMA represents a continuous area in the virtual memory
+	struct vm_area_struct *brkvma, *next = NULL;
+
+	// min allowed address of brk
+	unsigned long min_brk;
+
+	// default not immediately map to pages (lazy allocation)
+	bool populate = false;
+
+	// initialize a kernel LL
+	LIST_HEAD(uf);
+
+	// iterator for VMAs
+	// Modern Linux Uses Maple Tree to manage VMAs
+	struct vma_iterator vmi;
+	
+	// ontain write lock for the kernel data structure of mm_struct for this task
 	if (mmap_write_lock_killable(mm))
 		return -EINTR;
 
+	// current break address
 	origbrk = mm->brk;
 
+	// minimum permitted new break - cannot shrink to less that start_brk
 	min_brk = mm->start_brk;
+
+// if heap is not randomized
+// min_brk = end_data (heap start after data segment)
+// affects later validation of the new brk 
+// start_brk = where heap starts
+// end_data = where data segment ends
 #ifdef CONFIG_COMPAT_BRK
 	/*
 	 * CONFIG_COMPAT_BRK can still be overridden by setting
@@ -139,65 +170,85 @@ SYSCALL_DEFINE1(brk, unsigned long, brk)
 	if (!current->brk_randomized)
 		min_brk = mm->end_data;
 #endif
+
+	// invalid case-1: trying to move brk below the min permitted brk
 	if (brk < min_brk)
 		goto out;
 
-	/*
-	 * Check against rlimit here. If this check is done later after the test
-	 * of oldbrk with newbrk then it can escape the test and let the data
-	 * segment grow beyond its set limit the in case where the limit is
-	 * not page aligned -Ram Gupta
-	 */
+	// invalid case-2: 
+	// check before page aligned because actual bytes may exceed
+	// RLIMIT_DATA : max data/heap size (ulimit -d)
 	if (check_data_rlimit(rlimit(RLIMIT_DATA), brk, mm->start_brk,
 			      mm->end_data, mm->start_data))
 		goto out;
 
+	// round to next page boundary - what page boundary contains the addr
 	newbrk = PAGE_ALIGN(brk);
 	oldbrk = PAGE_ALIGN(mm->brk);
+
+	// base case-1: new break is within current page boundary
+	// VMAs operate at granularity of pages, no need to modify
 	if (oldbrk == newbrk) {
 		mm->brk = brk;
 		goto success;
 	}
 
-	/* Always allow shrinking brk. */
+	// Case-1 VMA Modification : brk shrink
 	if (brk <= mm->brk) {
-		/* Search one past newbrk */
+
+		// init vma iterator at the new page-aligned requested brk
 		vma_iter_init(&vmi, mm, newbrk);
+
+		// find the vma structure from iterator toward old break
+		// using (new_brk, old_brk) find the VMA(start, end) - interval searching
 		brkvma = vma_find(&vmi, oldbrk);
+
+		// no VMA found or the VMA starts after the old heap boundary
 		if (!brkvma || brkvma->vm_start >= oldbrk)
-			goto out; /* mapping intersects with an existing non-brk vma. */
-		/*
-		 * mm->brk must be protected by write mmap_lock.
-		 * do_vmi_align_munmap() will drop the lock on success,  so
-		 * update it before calling do_vma_munmap().
-		 */
+			goto out;
+
+		// update the program break to the lower new break - exact address
 		mm->brk = brk;
+
+		// Modify VMA at page level
 		if (do_vmi_align_munmap(&vmi, brkvma, mm, newbrk, oldbrk, &uf,
 					/* unlock = */ true))
-			goto out;
+			goto out; // return non-zero means failure
 
 		goto success_unlocked;
 	}
 
+	// invalid case-3: check whether extending over this range is valid
 	if (check_brk_limits(oldbrk, newbrk - oldbrk))
 		goto out;
 
-	/*
-	 * Only check if the next VMA is within the stack_guard_gap of the
-	 * expansion area
-	 */
+
+	// Case-2 VMA Modification: brk expand
+	// we have already checked new brk above
+
+	// init vma interator
 	vma_iter_init(&vmi, mm, oldbrk);
+
+	// the next VMA at or above the new proposed boundary
 	next = vma_find(&vmi, newbrk + PAGE_SIZE + stack_guard_gap);
+
+	// breached the safe boundary then exit
 	if (next && newbrk + PAGE_SIZE > vm_start_gap(next))
 		goto out;
 
+	// locate current VMA
 	brkvma = vma_prev_limit(&vmi, mm->start_brk);
-	/* Ok, looks good - let it rip. */
+
+	// Modify the VMA and append the new range to the VMA
+	// updates teh flags
 	if (do_brk_flags(&vmi, brkvma, oldbrk, newbrk - oldbrk,
 			 EMPTY_VMA_FLAGS) < 0)
 		goto out;
-
+	
+	// update brk in mm_struct
 	mm->brk = brk;
+
+	// map to physical pages before returning from system call - success_unlocked
 	if (vma_flags_test(&mm->def_vma_flags, VMA_LOCKED_BIT))
 		populate = true;
 

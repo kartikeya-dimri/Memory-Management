@@ -5,8 +5,8 @@ int main() {
     int *ptrs[1000];
     getchar();
     // 1000 small allocations
-    for (int i = 0; i < 1000; i++) {
-        ptrs[i] = malloc(40);
+    for (int i = 0; i < 40; i++) {
+        ptrs[i] = malloc(4096);
 
         if (ptrs[i] == NULL) {
             printf("malloc failed at allocation %d\n", i);
@@ -22,11 +22,15 @@ int main() {
     getchar();
 
     // Free the small allocations
-    for (int i = 0; i < 1000; i++) {
+    // for (int i = 0; i < 5; i++) {
+    //     free(ptrs[i]);
+    // }
+
+    for(int i = 39; i>=0; i--){
         free(ptrs[i]);
     }
 
-    printf("1000 small allocations freed\n");
+    printf("5 small allocations freed\n");
     getchar();
 
     // One large allocation
