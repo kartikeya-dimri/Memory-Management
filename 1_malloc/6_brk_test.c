@@ -6,7 +6,6 @@
 int main(void)
 {
     long page_size = sysconf(_SC_PAGESIZE);
-
     getchar();
 
     void *brk_addr = sbrk(0);
