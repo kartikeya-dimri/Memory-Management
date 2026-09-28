@@ -6,11 +6,12 @@
 int main(void)
 {
     long page_size = sysconf(_SC_PAGESIZE);
-    getchar();
-
+    
     void *brk_addr = sbrk(0);
-    printf("Page size: %ld\n", page_size);
-    printf("Initial brk: %p\n", brk_addr);
+
+    // printf("Page size: %ld\n", page_size);
+    // printf("Initial brk: %p\n", brk_addr);
+    getchar();
 
     for (long i = 1; i <= 5; i++) {
 
@@ -24,11 +25,15 @@ int main(void)
                    errno, strerror(errno));
             break;
         }
-
+        
+        *((char *)brk_addr+1) = 'A';
+        
         brk_addr = new_brk;
 
-        printf("Page %4ld: brk = %p\n", i, brk_addr);
+        // printf("Page %4ld: brk = %p\n", i, brk_addr);
     }
+
+    getchar();
 
     printf("\nFinal brk: %p\n", sbrk(0));
 
