@@ -1,6 +1,6 @@
 // to see locked
 //  cat /proc/$(pidof a.out)/smaps | grep -E '^[0-9a-f]+-|^Size:|^Locked:|^VmFlags:'
-// cta /proc/$(pidof a.out)/maps
+// cat /proc/$(pidof a.out)/smaps
 
 #include <stdio.h>
 #include <sys/mman.h>
@@ -29,7 +29,7 @@ int main(void)
     printf("Press Enter before mlock...");
     getchar();
 
-    if (mlock((char *)p + 4096, 4096) == -1) {
+    if (mlock((char *)p + 4096, 200) == -1) {
         perror("mlock");
         return 1;
     }
@@ -38,7 +38,8 @@ int main(void)
     printf("Press Enter after mlock...");
     getchar();
 
-    munlock((char *)p + 4096, 4096);
+    munlock((char *)p + 4096, 200);
+    getchar();
     munmap(p, size);
 
     return 0;
